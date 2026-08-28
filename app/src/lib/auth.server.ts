@@ -5,12 +5,14 @@
 //   ADMIN_SESSION_SECRET  a random string, 32+ chars, used to seal the cookie
 import { clearSession, getSession, updateSession } from "@tanstack/react-start/server";
 
+import { bindings } from "./bindings.server";
+
 interface AdminSessionData {
   authenticated?: boolean;
 }
 
 function sessionConfig() {
-  const password = process.env.ADMIN_SESSION_SECRET;
+  const password = bindings().ADMIN_SESSION_SECRET;
   if (!password || password.length < 32) {
     throw new Error(
       "ADMIN_SESSION_SECRET is not set (or too short — needs 32+ characters). " +
@@ -32,7 +34,7 @@ export async function requireAdmin(): Promise<void> {
 }
 
 export async function checkAdminPassword(password: string): Promise<boolean> {
-  const expected = process.env.ADMIN_PASSWORD;
+  const expected = bindings().ADMIN_PASSWORD;
   if (!expected) {
     throw new Error(
       "ADMIN_PASSWORD is not set. Set it with: higgsfield website secrets set ADMIN_PASSWORD=<your password>",
