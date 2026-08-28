@@ -1,29 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useState, type FormEvent } from "react";
 
 import { ScrollScrub } from "@/components/scroll-scrub/scroll-scrub";
 import { scrollScrubScenes, scrollScrubTheme } from "@/scroll-scrub-scenes";
+import { submitReservation } from "@/lib/api/reservations.functions";
+import { getMenu, type MenuItem } from "@/lib/api/menu.functions";
 
 export const Route = createFileRoute("/")({
+  loader: () => getMenu(),
   component: Index,
 });
-
-const MINI_PIZZE = [
-  { name: "Fromage", price: "200" },
-  { name: "Poulet", price: "300" },
-  { name: "Viande", price: "300" },
-  { name: "Thon", price: "300" },
-  { name: "Poulet fumé", price: "300" },
-];
-
-const PANUOZZO = [
-  { name: "Viande", price: "450" },
-  { name: "Poulet", price: "450" },
-  { name: "Légumes grillés", price: "350" },
-  { name: "Poulet, lait fumé", price: "500" },
-  { name: "3 fromages", price: "450" },
-  { name: "Thon", price: "400" },
-  { name: "Champignons", price: "400" },
-];
 
 const REVIEWS = [
   {
@@ -45,6 +31,9 @@ const REVIEWS = [
 
 const PHONE_DISPLAY = "0550 76 07 31";
 const PHONE_TEL = "tel:+213550760731";
+const WHATSAPP_URL = `https://wa.me/213550760731?text=${encodeURIComponent(
+  "Bonjour, je voudrais passer une commande chez Jogatina.",
+)}`;
 const MAPS_URL = "https://www.google.com/maps/search/?api=1&query=Pizzeria+Jogatina+Baraki+Alger";
 
 function CallButton({ className = "" }: { className?: string }) {
@@ -61,6 +50,26 @@ function CallButton({ className = "" }: { className?: string }) {
         />
       </svg>
       Appeler
+    </a>
+  );
+}
+
+function WhatsAppButton({ className = "" }: { className?: string }) {
+  return (
+    <a
+      href={WHATSAPP_URL}
+      target="_blank"
+      rel="noreferrer"
+      className={`jog-cta-outline inline-flex items-center gap-2 rounded-full border px-6 py-3 text-sm font-semibold transition-transform active:-translate-y-px active:scale-[0.98] ${className}`}
+      style={{ borderColor: "var(--jog-line)", color: "var(--jog-ink)" }}
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path
+          d="M12 2C6.5 2 2 6.5 2 12c0 1.9.5 3.6 1.4 5.2L2 22l4.9-1.3C8.4 21.5 10.1 22 12 22c5.5 0 10-4.5 10-10S17.5 2 12 2zm5.4 14.2c-.2.6-1.3 1.2-1.9 1.3-.5.1-1 .1-1.7-.1-.4-.1-.9-.3-1.5-.6-2.7-1.2-4.5-3.9-4.6-4.1-.1-.2-1.1-1.5-1.1-2.8 0-1.3.7-2 1-2.2.2-.2.5-.3.7-.3h.5c.2 0 .4 0 .6.4.2.5.7 1.7.8 1.9.1.2.1.4 0 .6-.1.2-.2.3-.4.5-.2.2-.4.4-.5.6-.2.2-.4.4-.2.7.2.4.9 1.5 2 2.4 1.4 1.2 2.5 1.6 2.9 1.8.3.1.5.1.7-.1.2-.2.8-.9 1-1.2.2-.3.4-.3.7-.2.3.1 1.7.8 2 1 .3.1.5.2.6.3.1.2.1.9-.1 1.5z"
+          fill="currentColor"
+        />
+      </svg>
+      WhatsApp
     </a>
   );
 }
@@ -91,20 +100,42 @@ function Nav() {
       <a href="#top" className="jog-display text-lg font-bold" style={{ color: "var(--jog-ink)" }}>
         Jogatina
       </a>
-      <nav className="hidden items-center gap-6 text-sm md:flex" style={{ color: "var(--jog-muted)" }}>
-        <a href="#apropos" className="jog-nav-link">À propos</a>
-        <a href="#menu" className="jog-nav-link">Menu</a>
-        <a href="#avis" className="jog-nav-link">Avis</a>
-        <a href="#infos" className="jog-nav-link">Infos</a>
+      <nav
+        className="hidden items-center gap-6 text-sm md:flex"
+        style={{ color: "var(--jog-muted)" }}
+      >
+        <a href="#apropos" className="jog-nav-link">
+          À propos
+        </a>
+        <a href="#menu" className="jog-nav-link">
+          Menu
+        </a>
+        <a href="#reservation" className="jog-nav-link">
+          Réserver
+        </a>
+        <a href="#avis" className="jog-nav-link">
+          Avis
+        </a>
+        <a href="#infos" className="jog-nav-link">
+          Infos
+        </a>
       </nav>
-      <CallButton className="text-xs md:text-sm" />
+      <div className="flex items-center gap-2">
+        <span className="hidden sm:inline-flex">
+          <WhatsAppButton className="text-xs md:text-sm" />
+        </span>
+        <CallButton className="text-xs md:text-sm" />
+      </div>
     </header>
   );
 }
 
 function About() {
   return (
-    <section id="apropos" className="jog-page grid gap-10 px-5 py-24 md:grid-cols-2 md:gap-16 md:px-10 md:py-32">
+    <section
+      id="apropos"
+      className="jog-page grid gap-10 px-5 py-24 md:grid-cols-2 md:gap-16 md:px-10 md:py-32"
+    >
       <div className="flex flex-col justify-center gap-5">
         <span className="text-xs uppercase tracking-[0.2em]" style={{ color: "var(--jog-accent)" }}>
           À Baraki depuis toujours
@@ -113,9 +144,8 @@ function About() {
           Une pizzeria de quartier, un vrai four à bois.
         </h2>
         <p className="max-w-[60ch] text-base leading-relaxed" style={{ color: "var(--jog-muted)" }}>
-          Chez Jogatina, la pâte est étirée à la main et chaque pizza cuit face
-          aux flammes. C'est ce feu de bois qui donne à la croûte son
-          croustillant et sa fumée, pizza après pizza.
+          Chez Jogatina, la pâte est étirée à la main et chaque pizza cuit face aux flammes. C'est
+          ce feu de bois qui donne à la croûte son croustillant et sa fumée, pizza après pizza.
         </p>
         <div className="flex items-center gap-3 pt-2">
           <span className="jog-display text-2xl">4.2</span>
@@ -139,45 +169,64 @@ function About() {
 
 function PriceRow({ name, price }: { name: string; price: string }) {
   return (
-    <div className="jog-price-row flex items-baseline justify-between gap-4 border-b py-3" style={{ borderColor: "var(--jog-line)" }}>
-      <span className="text-base" style={{ color: "var(--jog-ink)" }}>{name}</span>
-      <span
-        className="jog-display shrink-0 text-lg"
-        style={{ color: "var(--jog-accent)" }}
-      >
+    <div
+      className="jog-price-row flex items-baseline justify-between gap-4 border-b py-3"
+      style={{ borderColor: "var(--jog-line)" }}
+    >
+      <span className="text-base" style={{ color: "var(--jog-ink)" }}>
+        {name}
+      </span>
+      <span className="jog-display shrink-0 text-lg" style={{ color: "var(--jog-accent)" }}>
         {price} DA
       </span>
     </div>
   );
 }
 
-function Menu() {
+function groupByCategory(items: MenuItem[]) {
+  const groups = new Map<string, MenuItem[]>();
+  for (const item of items) {
+    const group = groups.get(item.category);
+    if (group) {
+      group.push(item);
+    } else {
+      groups.set(item.category, [item]);
+    }
+  }
+  return [...groups.entries()];
+}
+
+function Menu({ items }: { items: MenuItem[] }) {
+  const categories = groupByCategory(items);
+
   return (
-    <section id="menu" className="px-5 py-24 md:px-10 md:py-32" style={{ background: "var(--jog-surface)" }}>
+    <section
+      id="menu"
+      className="px-5 py-24 md:px-10 md:py-32"
+      style={{ background: "var(--jog-surface)" }}
+    >
       <div className="mx-auto max-w-4xl">
         <h2 className="jog-display mb-14 text-4xl md:text-6xl">Notre carte</h2>
         <div className="grid gap-12 md:grid-cols-2 md:gap-20">
-          <div>
-            <h3 className="jog-display mb-4 text-xl" style={{ color: "var(--jog-accent)" }}>
-              Mini pizze
-            </h3>
-            {MINI_PIZZE.map((item) => (
-              <PriceRow key={item.name} name={item.name} price={item.price} />
-            ))}
-          </div>
-          <div>
-            <h3 className="jog-display mb-4 text-xl" style={{ color: "var(--jog-accent)" }}>
-              Panuozzo
-            </h3>
-            {PANUOZZO.map((item) => (
-              <PriceRow key={item.name} name={item.name} price={item.price} />
-            ))}
-          </div>
+          {categories.map(([category, categoryItems]) => (
+            <div key={category}>
+              <h3 className="jog-display mb-4 text-xl" style={{ color: "var(--jog-accent)" }}>
+                {category}
+              </h3>
+              {categoryItems.map((item) => (
+                <PriceRow key={item.id} name={item.name} price={item.price} />
+              ))}
+            </div>
+          ))}
         </div>
         <p className="mt-10 text-sm" style={{ color: "var(--jog-muted)" }}>
-          Egalement au menu : Pizza 4 Fromages, Pizza Vegetariano et nos pizzas
-          napolitaines classiques. Demandez la carte complète sur place.
+          Egalement au menu : Pizza 4 Fromages, Pizza Vegetariano et nos pizzas napolitaines
+          classiques. Demandez la carte complète sur place.
         </p>
+        <div className="mt-8 flex flex-wrap gap-3">
+          <WhatsAppButton />
+          <CallButton />
+        </div>
       </div>
     </section>
   );
@@ -208,7 +257,11 @@ function Gallery() {
 
 function Reviews() {
   return (
-    <section id="avis" className="px-5 py-24 md:px-10 md:py-32" style={{ background: "var(--jog-bg)" }}>
+    <section
+      id="avis"
+      className="px-5 py-24 md:px-10 md:py-32"
+      style={{ background: "var(--jog-bg)" }}
+    >
       <div className="mx-auto max-w-4xl">
         <h2 className="jog-display mb-14 text-4xl md:text-6xl">Ce qu'on en dit</h2>
         <div className="grid gap-10 md:grid-cols-3">
@@ -228,9 +281,135 @@ function Reviews() {
   );
 }
 
+function Reservation() {
+  const [renderedAt] = useState(() => Date.now());
+  const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setStatus("submitting");
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const partySizeRaw = data.get("partySize");
+
+    try {
+      await submitReservation({
+        data: {
+          name: String(data.get("name") ?? ""),
+          phone: String(data.get("phone") ?? ""),
+          partySize: partySizeRaw ? Number(partySizeRaw) : undefined,
+          requestedAt: String(data.get("requestedAt") ?? "") || undefined,
+          message: String(data.get("message") ?? "") || undefined,
+          website: String(data.get("website") ?? ""),
+          renderedAt,
+        },
+      });
+      setStatus("success");
+      form.reset();
+    } catch {
+      setStatus("error");
+    }
+  }
+
+  return (
+    <section
+      id="reservation"
+      className="px-5 py-24 md:px-10 md:py-32"
+      style={{ background: "var(--jog-bg)" }}
+    >
+      <div className="mx-auto max-w-2xl">
+        <h2 className="jog-display mb-4 text-4xl md:text-6xl">Réserver une table</h2>
+        <p className="mb-10 text-base" style={{ color: "var(--jog-muted)" }}>
+          Laissez-nous vos coordonnées, on vous rappelle pour confirmer. Pour une réponse immédiate,
+          appelez-nous ou écrivez sur WhatsApp.
+        </p>
+
+        {status === "success" ? (
+          <p className="text-base" style={{ color: "var(--jog-ink)" }}>
+            Merci ! Votre demande a bien été envoyée, on vous recontacte vite au numéro indiqué.
+          </p>
+        ) : (
+          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+            <input
+              type="text"
+              name="website"
+              tabIndex={-1}
+              autoComplete="off"
+              aria-hidden="true"
+              className="jog-honeypot"
+            />
+            <div className="grid gap-5 md:grid-cols-2">
+              <label className="jog-field">
+                <span className="jog-field-label">Nom *</span>
+                <input
+                  name="name"
+                  type="text"
+                  required
+                  minLength={2}
+                  maxLength={100}
+                  className="jog-input"
+                />
+              </label>
+              <label className="jog-field">
+                <span className="jog-field-label">Téléphone *</span>
+                <input
+                  name="phone"
+                  type="tel"
+                  required
+                  minLength={8}
+                  maxLength={20}
+                  className="jog-input"
+                />
+              </label>
+              <label className="jog-field">
+                <span className="jog-field-label">Nombre de personnes</span>
+                <input name="partySize" type="number" min={1} max={50} className="jog-input" />
+              </label>
+              <label className="jog-field">
+                <span className="jog-field-label">Date et heure souhaitées</span>
+                <input
+                  name="requestedAt"
+                  type="text"
+                  placeholder="Ex : vendredi soir vers 20h"
+                  maxLength={120}
+                  className="jog-input"
+                />
+              </label>
+            </div>
+            <label className="jog-field">
+              <span className="jog-field-label">Message (optionnel)</span>
+              <textarea name="message" rows={3} maxLength={1000} className="jog-textarea" />
+            </label>
+
+            {status === "error" ? (
+              <p role="alert" className="text-sm" style={{ color: "var(--jog-accent)" }}>
+                Une erreur est survenue. Vous pouvez aussi nous appeler directement au{" "}
+                {PHONE_DISPLAY}.
+              </p>
+            ) : null}
+
+            <button
+              type="submit"
+              disabled={status === "submitting"}
+              className="jog-cta-fill inline-flex w-fit items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition-transform active:-translate-y-px active:scale-[0.98] disabled:opacity-60"
+              style={{ background: "var(--jog-accent)", color: "var(--jog-accent-ink)" }}
+            >
+              {status === "submitting" ? "Envoi..." : "Envoyer la demande"}
+            </button>
+          </form>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function InfoFooter() {
   return (
-    <footer id="infos" className="px-5 py-24 md:px-10 md:py-32" style={{ background: "var(--jog-surface)" }}>
+    <footer
+      id="infos"
+      className="px-5 py-24 md:px-10 md:py-32"
+      style={{ background: "var(--jog-surface)" }}
+    >
       <div className="mx-auto grid max-w-4xl gap-14 md:grid-cols-3">
         <div>
           <h3 className="jog-display mb-3 text-xl">Horaires</h3>
@@ -250,7 +429,10 @@ function InfoFooter() {
           <p className="text-base" style={{ color: "var(--jog-muted)" }}>
             {PHONE_DISPLAY}
           </p>
-          <CallButton className="mt-4" />
+          <div className="mt-4 flex flex-wrap gap-3">
+            <CallButton />
+            <WhatsAppButton />
+          </div>
         </div>
       </div>
       <p className="mx-auto mt-20 max-w-4xl text-xs" style={{ color: "var(--jog-muted)" }}>
@@ -260,15 +442,44 @@ function InfoFooter() {
   );
 }
 
+const STRUCTURED_DATA = {
+  "@context": "https://schema.org",
+  "@type": "Restaurant",
+  name: "Pizzeria Jogatina",
+  servesCuisine: "Pizza",
+  telephone: "+213550760731",
+  address: {
+    "@type": "PostalAddress",
+    streetAddress: "Lot 607",
+    addressLocality: "Baraki, Alger",
+    addressCountry: "DZ",
+  },
+  url: MAPS_URL,
+  openingHours: "Mo-Su 16:00-23:59",
+  aggregateRating: {
+    "@type": "AggregateRating",
+    ratingValue: "4.2",
+    reviewCount: "141",
+  },
+};
+
 function Index() {
+  const menuItems = Route.useLoaderData();
+
   return (
     <main id="top" className="jog-page">
+      {/* Static JSON-LD built from the module-level constant above — no user input. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA) }}
+      />
       <Nav />
       <ScrollScrub scenes={scrollScrubScenes} theme={scrollScrubTheme} />
       <About />
-      <Menu />
+      <Menu items={menuItems} />
       <Gallery />
       <Reviews />
+      <Reservation />
       <InfoFooter />
     </main>
   );

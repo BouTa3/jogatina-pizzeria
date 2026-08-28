@@ -246,6 +246,46 @@
   background: rgba(179, 64, 44, 0.08);
 }
 
+.jog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.jog-field-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--jog-muted);
+}
+
+.jog-input,
+.jog-textarea {
+  border: 1px solid var(--jog-line);
+  background: transparent;
+  color: var(--jog-ink);
+  border-radius: 0.6rem;
+  padding: 0.75rem 1rem;
+  font: inherit;
+  transition: border-color 0.2s ease;
+}
+.jog-input:focus,
+.jog-textarea:focus {
+  outline: none;
+  border-color: var(--jog-accent);
+}
+
+/* Honeypot: kept in the layout (not display:none) so it stays focusable to a
+   script that fills every input, while staying invisible and unreachable
+   (aria-hidden + tabIndex=-1 in markup) for real visitors. */
+.jog-honeypot {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .jog-nav-link::after,
   .jog-cta-fill,

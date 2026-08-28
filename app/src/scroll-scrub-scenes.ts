@@ -1,7 +1,4 @@
-import type {
-  ScrollScrubScene,
-  ScrollScrubTheme,
-} from "@/components/scroll-scrub/scroll-scrub";
+import type { ScrollScrubScene, ScrollScrubTheme } from "@/components/scroll-scrub/scroll-scrub";
 
 export const scrollScrubTheme: ScrollScrubTheme = {
   accent: "#b3402c",
@@ -23,6 +20,7 @@ export const scrollScrubScenes: ScrollScrubScene[] = [
     poster: "/assets/world/scene-01-poster.png",
     mobilePoster: "/assets/world/scene-01-mobile-poster.png",
     scroll: 8,
+    mobileScroll: 3,
     linger: 0.2,
   },
 ];

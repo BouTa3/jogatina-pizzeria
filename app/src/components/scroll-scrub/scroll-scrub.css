@@ -130,6 +130,14 @@
 .scroll-scrub__chapter,
 .scroll-scrub__connector-band {
   position: relative;
+  min-height: calc(var(--ss-scroll) * 100dvh);
+}
+
+@media (max-width: 860px) {
+  .scroll-scrub__chapter,
+  .scroll-scrub__connector-band {
+    min-height: calc(var(--ss-scroll-mobile, var(--ss-scroll)) * 100dvh);
+  }
 }
 
 .scroll-scrub__chapter-pin {
@@ -226,6 +234,7 @@
   }
 
   .scroll-scrub__route {
+    top: calc(4.75rem + env(safe-area-inset-top));
     right: max(0.75rem, env(safe-area-inset-right));
     left: max(0.75rem, env(safe-area-inset-left));
     justify-content: flex-start;

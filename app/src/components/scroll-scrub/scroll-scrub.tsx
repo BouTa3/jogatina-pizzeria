@@ -22,6 +22,9 @@ export interface ScrollScrubScene {
   align?: "left" | "right";
   /** Viewport-heights assigned to this scene. More distance means slower scrub. */
   scroll?: number;
+  /** Viewport-heights on narrow/coarse-pointer viewports. Defaults to `scroll`;
+   *  set lower since each swipe covers more perceived progress on a phone. */
+  mobileScroll?: number;
   /** 0..0.6. Slow the middle of the clip without changing either seam frame. */
   linger?: number;
   objectPosition?: string;
@@ -36,6 +39,8 @@ export interface ScrollScrubConnector {
   clip: string;
   mobileClip?: string;
   scroll?: number;
+  /** Viewport-heights on narrow/coarse-pointer viewports. Defaults to `scroll`. */
+  mobileScroll?: number;
 }
 
 export interface ScrollScrubTheme {
@@ -64,6 +69,7 @@ interface Segment {
   clip: string;
   mobileClip?: string;
   weight: number;
+  mobileWeight: number;
   linger: number;
   objectPosition: string;
   mobileObjectPosition: string;
@@ -85,6 +91,7 @@ interface RuntimeSegment extends Segment {
   video?: HTMLVideoElement;
   objectUrl?: string;
   abort?: AbortController;
+  seekStartedAt?: number;
 }
 
 interface Controller {
@@ -93,8 +100,7 @@ interface Controller {
 
 type ThemeStyle = CSSProperties & Record<`--ss-${string}`, string | number>;
 
-const clamp = (value: number, min = 0, max = 1) =>
-  Math.min(max, Math.max(min, value));
+const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, value));
 
 const smoothstep = (value: number) => {
   const x = clamp(value);
@@ -110,7 +116,7 @@ const lingerEase = (value: number, amount: number) => {
 
 function buildSegments(
   scenes: ScrollScrubScene[],
-  connectors: (ScrollScrubConnector | null)[]
+  connectors: (ScrollScrubConnector | null)[],
 ): Segment[] {
   const result: Segment[] = [];
 
@@ -125,22 +131,20 @@ function buildSegments(
       linger: scene.linger ?? 0,
       mobileClip: scene.mobileClip,
       mobilePoster: scene.mobilePoster,
-      mobileObjectPosition:
-        scene.mobileObjectPosition ?? scene.objectPosition ?? "50% 50%",
+      mobileObjectPosition: scene.mobileObjectPosition ?? scene.objectPosition ?? "50% 50%",
       nextSectionIndex: index,
       objectPosition: scene.objectPosition ?? "50% 50%",
       poster: scene.poster,
       scene,
       sectionIndex: index,
       weight: scene.scroll ?? 1.4,
+      mobileWeight: scene.mobileScroll ?? scene.scroll ?? 1.4,
     });
 
     const connector = connectors[index];
     if (index < scenes.length - 1 && connector?.clip) {
       if (connector.mobileClip && !connector.mobilePoster) {
-        throw new Error(
-          `Connector after ${scene.id} needs mobilePoster for mobileClip`
-        );
+        throw new Error(`Connector after ${scene.id} needs mobilePoster for mobileClip`);
       }
       const nextScene = scenes[index + 1];
       result.push({
@@ -151,14 +155,13 @@ function buildSegments(
         mobileClip: connector.mobileClip,
         mobilePoster: connector.mobilePoster,
         mobileObjectPosition:
-          nextScene.mobileObjectPosition ??
-          nextScene.objectPosition ??
-          "50% 50%",
+          nextScene.mobileObjectPosition ?? nextScene.objectPosition ?? "50% 50%",
         nextSectionIndex: index + 1,
         objectPosition: nextScene.objectPosition ?? "50% 50%",
         poster: connector.poster,
         sectionIndex: index,
         weight: connector.scroll ?? 0.8,
+        mobileWeight: connector.mobileScroll ?? connector.scroll ?? 0.8,
       });
     }
   }
@@ -177,10 +180,7 @@ export function ScrollScrub({
   const controllerRef = useRef<Controller | null>(null);
   const onActiveRef = useRef(onActiveSectionChange);
   const [activeSection, setActiveSection] = useState(0);
-  const segments = useMemo(
-    () => buildSegments(scenes, connectors ?? []),
-    [connectors, scenes]
-  );
+  const segments = useMemo(() => buildSegments(scenes, connectors ?? []), [connectors, scenes]);
 
   // Keep the latest callback reachable from the scroll loop without making it a
   // dependency of the controller effect. Synced in an effect, never during
@@ -195,25 +195,14 @@ export function ScrollScrub({
       return;
     }
 
-    const layerNodes = [
-      ...root.querySelectorAll<HTMLElement>("[data-scroll-scrub-layer]"),
-    ];
-    const bandNodes = [
-      ...root.querySelectorAll<HTMLElement>("[data-scroll-scrub-band]"),
-    ];
-    if (
-      layerNodes.length !== segments.length ||
-      bandNodes.length !== segments.length
-    ) {
+    const layerNodes = [...root.querySelectorAll<HTMLElement>("[data-scroll-scrub-layer]")];
+    const bandNodes = [...root.querySelectorAll<HTMLElement>("[data-scroll-scrub-band]")];
+    if (layerNodes.length !== segments.length || bandNodes.length !== segments.length) {
       throw new Error("ScrollScrub segment markup is out of sync");
     }
 
-    const reduceMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
-    const coarsePointer = window.matchMedia(
-      "(hover: none) and (pointer: coarse)"
-    ).matches;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const coarsePointer = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
     const smallViewport = window.matchMedia("(max-width: 860px)");
     const isMobile = () => coarsePointer || smallViewport.matches;
     const sourceFor = (segment: RuntimeSegment) =>
@@ -242,6 +231,53 @@ export function ScrollScrub({
     let layoutWidth = window.innerWidth;
     let userReady = false;
 
+    // Temporary diagnostic overlay for the mobile scrub-freeze investigation.
+    // Opt in with ?debug=1; no effect otherwise. Remove once the mobile bug
+    // is confirmed fixed.
+    const debugEnabled = new URLSearchParams(window.location.search).has("debug");
+    const debugLines: string[] = [];
+    let debugPanel: HTMLPreElement | null = null;
+    const debugLog = (msg: string) => {
+      if (!debugEnabled) {
+        return;
+      }
+      debugLines.push(`${Math.round(performance.now())}ms ${msg}`);
+      if (debugLines.length > 14) {
+        debugLines.shift();
+      }
+    };
+    const bufferedSummary = (video: HTMLVideoElement) => {
+      const ranges: string[] = [];
+      for (let i = 0; i < video.buffered.length; i += 1) {
+        ranges.push(`${video.buffered.start(i).toFixed(2)}-${video.buffered.end(i).toFixed(2)}`);
+      }
+      return ranges.join(",") || "none";
+    };
+    if (debugEnabled) {
+      debugPanel = document.createElement("pre");
+      debugPanel.style.cssText =
+        "position:fixed;left:8px;bottom:8px;z-index:99999;max-width:94vw;max-height:60vh;" +
+        "overflow:auto;margin:0;padding:8px;font-size:10px;line-height:1.4;color:#0f0;" +
+        "background:rgba(0,0,0,0.82);pointer-events:none;white-space:pre-wrap;" +
+        "font-family:monospace;border-radius:6px;";
+      document.body.append(debugPanel);
+    }
+    const updateDebugPanel = () => {
+      if (!debugPanel) {
+        return;
+      }
+      const activeSegment = runtime.find(
+        (segment) => segment.kind === "scene" && segment.sectionIndex === active,
+      );
+      const video = activeSegment?.video;
+      const state = video
+        ? `active=${activeSegment?.key} readyState=${video.readyState} networkState=${video.networkState} ` +
+          `seeking=${video.seeking} currentTime=${video.currentTime.toFixed(2)} duration=${(video.duration || 0).toFixed(2)} ` +
+          `target=${activeSegment?.target.toFixed(3)} buffered=${bufferedSummary(video)}`
+        : `active=${activeSegment?.key ?? active} (no video element yet)`;
+      debugPanel.textContent = `${state}\n---\n${debugLines.join("\n")}`;
+    };
+
     const unloadClip = (segment: RuntimeSegment) => {
       segment.abort?.abort();
       segment.video?.remove();
@@ -252,6 +288,7 @@ export function ScrollScrub({
       delete segment.video;
       delete segment.objectUrl;
       delete segment.loadedSource;
+      delete segment.seekStartedAt;
       segment.loading = false;
       segment.ready = false;
       segment.failed = false;
@@ -267,10 +304,7 @@ export function ScrollScrub({
       layoutWidth = window.innerWidth;
 
       for (const segment of runtime) {
-        if (
-          segment.loadedSource &&
-          segment.loadedSource !== sourceFor(segment)
-        ) {
+        if (segment.loadedSource && segment.loadedSource !== sourceFor(segment)) {
           unloadClip(segment);
         }
         const rect = segment.band.getBoundingClientRect();
@@ -311,6 +345,7 @@ export function ScrollScrub({
       segment.abort = new AbortController();
       const request = segment.abort;
 
+      debugLog(`${segment.key} fetch start ${source}`);
       try {
         const response = await fetch(source, {
           signal: request.signal,
@@ -319,13 +354,10 @@ export function ScrollScrub({
           throw new Error(`Clip failed: ${response.status}`);
         }
         const blob = await response.blob();
-        if (
-          destroyed ||
-          request.signal.aborted ||
-          segment.loadedSource !== source
-        ) {
+        if (destroyed || request.signal.aborted || segment.loadedSource !== source) {
           return;
         }
+        debugLog(`${segment.key} fetched ${(blob.size / 1024 / 1024).toFixed(2)}MB`);
 
         const objectUrl = URL.createObjectURL(blob);
         const video = document.createElement("video");
@@ -346,21 +378,18 @@ export function ScrollScrub({
             segment.ready = true;
             segment.loading = false;
             dirty = true;
+            debugLog(`${segment.key} loadedmetadata duration=${video.duration.toFixed(2)}`);
           },
-          { once: true }
+          { once: true },
         );
         video.addEventListener(
           "loadeddata",
           () => {
-            if (
-              userReady &&
-              segment.video === video &&
-              segment.loadedSource === source
-            ) {
+            if (userReady && segment.video === video && segment.loadedSource === source) {
               void primeVideo(video);
             }
           },
-          { once: true }
+          { once: true },
         );
         video.addEventListener(
           "error",
@@ -377,18 +406,24 @@ export function ScrollScrub({
             segment.ready = false;
             delete segment.layer.dataset.videoPainted;
             segment.layer.dataset.videoFailed = "true";
+            debugLog(`${segment.key} ERROR ${video.error?.code} ${video.error?.message}`);
           },
-          { once: true }
+          { once: true },
         );
-        video.addEventListener(
-          "seeked",
-          () => {
-            if (segment.video === video && segment.loadedSource === source) {
-              segment.layer.dataset.videoPainted = "true";
-            }
-          },
-          { once: true }
-        );
+        video.addEventListener("seeked", () => {
+          if (segment.video === video && segment.loadedSource === source) {
+            segment.layer.dataset.videoPainted = "true";
+            delete segment.seekStartedAt;
+            debugLog(`${segment.key} seeked -> ${video.currentTime.toFixed(2)}`);
+          }
+        });
+        if (debugEnabled) {
+          for (const eventName of ["seeking", "waiting", "stalled", "suspend", "pause"] as const) {
+            video.addEventListener(eventName, () => {
+              debugLog(`${segment.key} ${eventName} @${video.currentTime.toFixed(2)}`);
+            });
+          }
+        }
 
         segment.layer.append(video);
         segment.objectUrl = objectUrl;
@@ -420,9 +455,7 @@ export function ScrollScrub({
 
         const length = Math.max(segment.end - segment.start, 1);
         const local = clamp((y - segment.start) / length);
-        segment.target = segment.linger
-          ? lingerEase(local, segment.linger)
-          : local;
+        segment.target = segment.linger ? lingerEase(local, segment.linger) : local;
 
         let outside = 0;
         if (y < segment.start) {
@@ -440,10 +473,7 @@ export function ScrollScrub({
         segment.layer.style.opacity = String(opacity);
         segment.layer.style.zIndex = index === currentIndex ? "2" : "1";
 
-        if (
-          y > segment.start - 1.5 * viewportHeight &&
-          y < segment.end + 1.5 * viewportHeight
-        ) {
+        if (y > segment.start - 1.5 * viewportHeight && y < segment.end + 1.5 * viewportHeight) {
           void loadClip(segment);
         }
       }
@@ -466,26 +496,42 @@ export function ScrollScrub({
       root.style.setProperty("--ss-progress", String(clamp(y / total)));
     };
 
+    // iOS/WebKit can leave `video.seeking` stuck `true` forever after enough
+    // programmatic seeks on a muted, playsinline, blob-backed <video> — the
+    // `seeked` event simply never fires again. Waiting on it indefinitely is
+    // what causes scrubbing to play a little on mobile then freeze for good.
+    // Re-issuing the seek once a watchdog timeout elapses is the standard
+    // workaround: it unsticks the decoder instead of stalling forever.
+    const SEEK_STUCK_MS = 300;
+
     const updateVideos = () => {
+      const now = performance.now();
       for (const segment of runtime) {
         const { video } = segment;
-        if (!video || !segment.ready || video.seeking) {
+        if (!video || !segment.ready) {
           continue;
         }
-        if (
-          !segment.visible &&
-          Math.abs(segment.current - segment.target) < 0.002
-        ) {
+        const stuckSeeking =
+          video.seeking &&
+          segment.seekStartedAt !== undefined &&
+          now - segment.seekStartedAt > SEEK_STUCK_MS;
+        if (video.seeking && !stuckSeeking) {
+          continue;
+        }
+        if (stuckSeeking) {
+          debugLog(`${segment.key} STUCK seek forced unstick @${video.currentTime.toFixed(2)}`);
+        }
+        if (!segment.visible && Math.abs(segment.current - segment.target) < 0.002) {
           continue;
         }
 
         segment.current += (segment.target - segment.current) * 0.2;
-        const targetTime =
-          clamp(segment.current, 0, 0.999) * (video.duration || 1);
+        const targetTime = clamp(segment.current, 0, 0.999) * (video.duration || 1);
         const epsilon = isMobile() ? 0.02 : 0.008;
         if (Math.abs(video.currentTime - targetTime) > epsilon) {
           try {
             video.currentTime = targetTime;
+            segment.seekStartedAt = now;
           } catch {
             // Keep the last painted frame while the browser catches up.
           }
@@ -502,6 +548,7 @@ export function ScrollScrub({
         readScroll();
       }
       updateVideos();
+      updateDebugPanel();
       frame = window.requestAnimationFrame(tick);
     };
 
@@ -527,14 +574,12 @@ export function ScrollScrub({
     controllerRef.current = {
       jumpToSection(index) {
         const segment = runtime.find(
-          (candidate) =>
-            candidate.kind === "scene" && candidate.sectionIndex === index
+          (candidate) => candidate.kind === "scene" && candidate.sectionIndex === index,
         );
         if (!segment) {
           return;
         }
-        const top =
-          rootTop + segment.start + 0.15 * (segment.end - segment.start);
+        const top = rootTop + segment.start + 0.15 * (segment.end - segment.start);
         window.scrollTo({
           behavior: reduceMotion ? "auto" : "smooth",
           top,
@@ -568,6 +613,7 @@ export function ScrollScrub({
       window.removeEventListener("touchstart", onFirstGesture);
       root.style.removeProperty("--ss-progress");
       delete root.dataset.activeSection;
+      debugPanel?.remove();
 
       for (const segment of runtime) {
         unloadClip(segment);
@@ -650,8 +696,9 @@ export function ScrollScrub({
 
       <div className="scroll-scrub__story">
         {segments.map((segment) => {
-          const bandStyle: CSSProperties = {
-            minHeight: `${Math.max(segment.weight, 0.2) * 100}dvh`,
+          const bandStyle: ThemeStyle = {
+            "--ss-scroll": Math.max(segment.weight, 0.2),
+            "--ss-scroll-mobile": Math.max(segment.mobileWeight, 0.2),
           };
 
           if (segment.kind === "connector") {
@@ -683,12 +730,8 @@ export function ScrollScrub({
             >
               <div className="scroll-scrub__chapter-pin">
                 <div className="scroll-scrub__copy">
-                  {scene.kicker ? (
-                    <p className="scroll-scrub__kicker">{scene.kicker}</p>
-                  ) : null}
-                  <Heading className="scroll-scrub__title">
-                    {scene.title}
-                  </Heading>
+                  {scene.kicker ? <p className="scroll-scrub__kicker">{scene.kicker}</p> : null}
+                  <Heading className="scroll-scrub__title">{scene.title}</Heading>
                   <p className="scroll-scrub__body">{scene.body}</p>
                   {scene.tags?.length ? (
                     <ul className="scroll-scrub__tags">
