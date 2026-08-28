@@ -14,6 +14,7 @@ import {
   deleteMenuItem,
   type MenuItem,
 } from "@/lib/api/menu.functions";
+import { getSiteSettings, updatePhoneNumber, type SiteSettings } from "@/lib/api/settings.functions";
 
 export const Route = createFileRoute("/admin")({
   loader: async () => {
@@ -21,8 +22,12 @@ export const Route = createFileRoute("/admin")({
     if (!authenticated) {
       return { authenticated: false as const };
     }
-    const [reservations, menu] = await Promise.all([listReservations(), getMenu()]);
-    return { authenticated: true as const, reservations, menu };
+    const [reservations, menu, settings] = await Promise.all([
+      listReservations(),
+      getMenu(),
+      getSiteSettings(),
+    ]);
+    return { authenticated: true as const, reservations, menu, settings };
   },
   component: AdminPage,
 });
@@ -327,6 +332,66 @@ function MenuPanel({ items, onChange }: { items: MenuItem[]; onChange: () => voi
   );
 }
 
+function SettingsPanel({ settings, onChange }: { settings: SiteSettings; onChange: () => void }) {
+  const [phone, setPhone] = useState(settings.phoneDisplay);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPending(true);
+    setError(null);
+    setSuccess(false);
+    try {
+      await updatePhoneNumber({ data: { phone } });
+      setSuccess(true);
+      onChange();
+    } catch {
+      setError("Numéro invalide. Utilisez un numéro algérien valide (ex : 0550 76 07 31).");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <section>
+      <h2 className="jog-display mb-6 text-2xl">Coordonnées</h2>
+      <form onSubmit={handleSubmit} className="flex max-w-sm flex-col gap-4">
+        <label className="jog-field">
+          <span className="jog-field-label">Numéro de téléphone</span>
+          <input
+            name="phone"
+            type="tel"
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+            required
+            className="jog-input"
+          />
+        </label>
+        {error ? (
+          <p role="alert" className="text-sm" style={{ color: "var(--jog-accent)" }}>
+            {error}
+          </p>
+        ) : null}
+        {success ? (
+          <p className="text-sm" style={{ color: "var(--jog-ink)" }}>
+            Numéro mis à jour.
+          </p>
+        ) : null}
+        <button
+          type="submit"
+          disabled={pending}
+          className="jog-cta-fill inline-flex w-fit items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold disabled:opacity-60"
+          style={{ background: "var(--jog-accent)", color: "var(--jog-accent-ink)" }}
+        >
+          {pending ? "Enregistrement..." : "Enregistrer"}
+        </button>
+      </form>
+    </section>
+  );
+}
+
 function AdminPage() {
   const data = Route.useLoaderData();
   const router = useRouter();
@@ -355,6 +420,7 @@ function AdminPage() {
       <div className="mx-auto flex max-w-4xl flex-col gap-16">
         <ReservationsPanel reservations={data.reservations} onChange={refresh} />
         <MenuPanel items={data.menu} onChange={refresh} />
+        <SettingsPanel settings={data.settings} onChange={refresh} />
       </div>
     </div>
   );

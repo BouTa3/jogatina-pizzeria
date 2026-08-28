@@ -5,9 +5,13 @@ import { ScrollScrub } from "@/components/scroll-scrub/scroll-scrub";
 import { scrollScrubScenes, scrollScrubTheme } from "@/scroll-scrub-scenes";
 import { submitReservation } from "@/lib/api/reservations.functions";
 import { getMenu, type MenuItem } from "@/lib/api/menu.functions";
+import { getSiteSettings, type SiteSettings } from "@/lib/api/settings.functions";
 
 export const Route = createFileRoute("/")({
-  loader: () => getMenu(),
+  loader: async () => {
+    const [menu, settings] = await Promise.all([getMenu(), getSiteSettings()]);
+    return { menu, settings };
+  },
   component: Index,
 });
 
@@ -29,17 +33,12 @@ const REVIEWS = [
   },
 ];
 
-const PHONE_DISPLAY = "0550 76 07 31";
-const PHONE_TEL = "tel:+213550760731";
-const WHATSAPP_URL = `https://wa.me/213550760731?text=${encodeURIComponent(
-  "Bonjour, je voudrais passer une commande chez Jogatina.",
-)}`;
 const MAPS_URL = "https://www.google.com/maps/search/?api=1&query=Pizzeria+Jogatina+Baraki+Alger";
 
-function CallButton({ className = "" }: { className?: string }) {
+function CallButton({ phone, className = "" }: { phone: SiteSettings; className?: string }) {
   return (
     <a
-      href={PHONE_TEL}
+      href={`tel:${phone.phoneE164}`}
       className={`jog-cta-fill inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition-transform active:-translate-y-px active:scale-[0.98] ${className}`}
       style={{ background: "var(--jog-accent)", color: "var(--jog-accent-ink)" }}
     >
@@ -54,10 +53,13 @@ function CallButton({ className = "" }: { className?: string }) {
   );
 }
 
-function WhatsAppButton({ className = "" }: { className?: string }) {
+function WhatsAppButton({ phone, className = "" }: { phone: SiteSettings; className?: string }) {
+  const href = `https://wa.me/${phone.phoneE164.replace("+", "")}?text=${encodeURIComponent(
+    "Bonjour, je voudrais passer une commande chez Jogatina.",
+  )}`;
   return (
     <a
-      href={WHATSAPP_URL}
+      href={href}
       target="_blank"
       rel="noreferrer"
       className={`jog-cta-outline inline-flex items-center gap-2 rounded-full border px-6 py-3 text-sm font-semibold transition-transform active:-translate-y-px active:scale-[0.98] ${className}`}
@@ -94,7 +96,7 @@ function DirectionsButton({ className = "" }: { className?: string }) {
   );
 }
 
-function Nav() {
+function Nav({ phone }: { phone: SiteSettings }) {
   return (
     <header className="fixed inset-x-0 top-0 z-50 flex items-center justify-between px-5 py-4 md:px-10">
       <a href="#top" className="jog-display text-lg font-bold" style={{ color: "var(--jog-ink)" }}>
@@ -122,9 +124,9 @@ function Nav() {
       </nav>
       <div className="flex items-center gap-2">
         <span className="hidden sm:inline-flex">
-          <WhatsAppButton className="text-xs md:text-sm" />
+          <WhatsAppButton phone={phone} className="text-xs md:text-sm" />
         </span>
-        <CallButton className="text-xs md:text-sm" />
+        <CallButton phone={phone} className="text-xs md:text-sm" />
       </div>
     </header>
   );
@@ -196,7 +198,7 @@ function groupByCategory(items: MenuItem[]) {
   return [...groups.entries()];
 }
 
-function Menu({ items }: { items: MenuItem[] }) {
+function Menu({ items, phone }: { items: MenuItem[]; phone: SiteSettings }) {
   const categories = groupByCategory(items);
 
   return (
@@ -224,8 +226,8 @@ function Menu({ items }: { items: MenuItem[] }) {
           classiques. Demandez la carte complète sur place.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
-          <WhatsAppButton />
-          <CallButton />
+          <WhatsAppButton phone={phone} />
+          <CallButton phone={phone} />
         </div>
       </div>
     </section>
@@ -281,7 +283,7 @@ function Reviews() {
   );
 }
 
-function Reservation() {
+function Reservation({ phone }: { phone: SiteSettings }) {
   const [renderedAt] = useState(() => Date.now());
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
 
@@ -384,7 +386,7 @@ function Reservation() {
             {status === "error" ? (
               <p role="alert" className="text-sm" style={{ color: "var(--jog-accent)" }}>
                 Une erreur est survenue. Vous pouvez aussi nous appeler directement au{" "}
-                {PHONE_DISPLAY}.
+                {phone.phoneDisplay}.
               </p>
             ) : null}
 
@@ -403,7 +405,7 @@ function Reservation() {
   );
 }
 
-function InfoFooter() {
+function InfoFooter({ phone }: { phone: SiteSettings }) {
   return (
     <footer
       id="infos"
@@ -427,11 +429,11 @@ function InfoFooter() {
         <div>
           <h3 className="jog-display mb-3 text-xl">Contact</h3>
           <p className="text-base" style={{ color: "var(--jog-muted)" }}>
-            {PHONE_DISPLAY}
+            {phone.phoneDisplay}
           </p>
           <div className="mt-4 flex flex-wrap gap-3">
-            <CallButton />
-            <WhatsAppButton />
+            <CallButton phone={phone} />
+            <WhatsAppButton phone={phone} />
           </div>
         </div>
       </div>
@@ -442,12 +444,11 @@ function InfoFooter() {
   );
 }
 
-const STRUCTURED_DATA = {
+const STRUCTURED_DATA_BASE = {
   "@context": "https://schema.org",
   "@type": "Restaurant",
   name: "Pizzeria Jogatina",
   servesCuisine: "Pizza",
-  telephone: "+213550760731",
   address: {
     "@type": "PostalAddress",
     streetAddress: "Lot 607",
@@ -464,23 +465,25 @@ const STRUCTURED_DATA = {
 };
 
 function Index() {
-  const menuItems = Route.useLoaderData();
+  const { menu, settings } = Route.useLoaderData();
+  const structuredData = { ...STRUCTURED_DATA_BASE, telephone: settings.phoneE164 };
 
   return (
     <main id="top" className="jog-page">
-      {/* Static JSON-LD built from the module-level constant above — no user input. */}
+      {/* JSON-LD built from the module-level constant plus the admin-editable
+          phone number — no free-form user input reaches this. */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
       />
-      <Nav />
+      <Nav phone={settings} />
       <ScrollScrub scenes={scrollScrubScenes} theme={scrollScrubTheme} />
       <About />
-      <Menu items={menuItems} />
+      <Menu items={menu} phone={settings} />
       <Gallery />
       <Reviews />
-      <Reservation />
-      <InfoFooter />
+      <Reservation phone={settings} />
+      <InfoFooter phone={settings} />
     </main>
   );
 }
