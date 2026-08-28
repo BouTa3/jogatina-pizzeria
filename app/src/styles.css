@@ -182,3 +182,74 @@
     border-color: var(--hf-color-border-default);
   }
 }
+
+/* Pizzeria Jogatina — site's own brand token layer (Trattoria Noir). */
+:root {
+  --jog-bg: #14160f;
+  --jog-surface: #1b1e14;
+  --jog-ink: #f3ede0;
+  --jog-muted: #a9a798;
+  --jog-accent: #b3402c;
+  --jog-accent-ink: #f8ece7;
+  --jog-line: rgba(243, 237, 224, 0.12);
+  --jog-font-display: "Cabinet Grotesk", "Inter Tight", system-ui, sans-serif;
+  --jog-font-body: "Inter Tight", system-ui, sans-serif;
+}
+
+.jog-page {
+  background: var(--jog-bg);
+  color: var(--jog-ink);
+  font-family: var(--jog-font-body);
+}
+
+.jog-display {
+  font-family: var(--jog-font-display);
+  letter-spacing: -0.02em;
+  line-height: 0.98;
+}
+
+.jog-nav-link {
+  position: relative;
+  transition: color 0.2s ease;
+}
+.jog-nav-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -4px;
+  width: 0;
+  height: 1px;
+  background: var(--jog-accent);
+  transition: width 0.25s ease;
+}
+.jog-nav-link:hover {
+  color: var(--jog-ink);
+}
+.jog-nav-link:hover::after {
+  width: 100%;
+}
+
+.jog-cta-fill {
+  box-shadow: 0 6px 20px -8px rgba(179, 64, 44, 0.6);
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+.jog-cta-fill:hover {
+  box-shadow: 0 8px 26px -6px rgba(179, 64, 44, 0.75);
+}
+
+.jog-cta-outline {
+  background: transparent;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+.jog-cta-outline:hover {
+  border-color: var(--jog-accent);
+  background: rgba(179, 64, 44, 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jog-nav-link::after,
+  .jog-cta-fill,
+  .jog-cta-outline {
+    transition: none;
+  }
+}
